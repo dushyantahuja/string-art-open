@@ -5,7 +5,6 @@ from skimage.transform import resize
 from skimage.draw import line_aa
 from importlib import resources
 import random
-from functools import lru_cache
 import numba
 import sys
 from pathlib import Path
@@ -15,15 +14,23 @@ from rembg import remove # can comment this out if you don't need background rem
 API_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(API_ROOT))
 
-@lru_cache(maxsize=1)
-def load_line_profiles_cached(resolution: int):
+def load_line_profiles(resolution, nail_coords):
     name = f"line_profiles_{resolution}.npy"
-    with resources.files("assets").joinpath(name).open("rb") as f:
+    assets_path = Path(resources.files("assets"))
+    file_path = assets_path / name
+    
+    if not file_path.exists():
+        print("Line profiles not found — computing and saving")
+        from StringArtUtils import StringArtUtils
+        profiles = StringArtUtils.precompute_line_profiles(nail_coords)
+        assets_path.mkdir(parents=True, exist_ok=True)
+        np.save(file_path, profiles)
+    else:
         print("Loaded line profiles")
-        return np.load(f, allow_pickle=True).item()
 
-@lru_cache(maxsize=1) 
-def load_templates_cached():
+    return np.load(file_path, allow_pickle=True).item()
+
+def load_templates():
     print('Loaded preview templates')
     def load(name):
         with resources.files(
@@ -170,10 +177,10 @@ class StringArtEngine:
             ]
             for i in range(self.num_nails)]
         
-        # Load line profiles, templates and calculate nail coordinates
-        self.line_profiles = load_line_profiles_cached(self.resolution)
-        self.templates = load_templates_cached()
+        # Calculate nail coordinates and load in line profiles and templates
         self.nail_coords = self.create_circle_nail_positions(self.num_nails, self.resolution // 2)
+        self.line_profiles = load_line_profiles(self.resolution, self.nail_coords)
+        self.templates = load_templates()
     
     def largest_square(self, image):
         """

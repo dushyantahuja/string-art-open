@@ -33,7 +33,8 @@ StringArtUtils has useful functions:
 number_reader: simple UI for reading sequence (helpful for actually stringing)
 
 assets
-    - line_porfiles_500.npy: pre computed anti-aliased line profiles (rows,cols,vals)
+    - line_porfiles_500.npy: pre computed anti-aliased line profiles (rows,cols,vals), 150Mb
+    (will be created on the first generation, then reused)
     - nail_template.png: full size nail template
     - nail_template_sliced.pdf: sliced for 50cm board diameter
     - template_board.jpeg: template for rendering to show realistic result on real board (200 nails 50cm diameter)
@@ -65,4 +66,6 @@ This can then be pasted onto a template image with known centre and diameter coo
 - in StringArtEngine load_templates_cached, load in new template image
 - in StringArtEngine render_all_previews, add the new template coords, lighting setup and add to previews dictionary
 
-* USe the importance UI tool to highlight details in the string art. Can adjust the strength of this in StringArtUtils
+* Use the importance UI tool to highlight details in the string art. Can adjust the strength of this in StringArtUtils
+
+* Do not change folder structure (it will break stuff!)

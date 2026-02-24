@@ -9,3 +9,5 @@ results/library/*
 !results/library/example/**
 
 __pycache__
+assets/line_profiles*
+.DS_Store

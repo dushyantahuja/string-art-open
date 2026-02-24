@@ -2,9 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from skimage.draw import line_aa, disk
-from StringArtEngine import StringArtEngine
 
-class StringArtUtils(StringArtEngine):
+class StringArtUtils():
     """
     Utility functions for string art process.
     i.e. anything not in StringArtEngine.
