@@ -1,0 +1,1 @@
+# intentionally empty init - so assets folder is a module

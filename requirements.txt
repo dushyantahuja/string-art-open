@@ -1,0 +1,6 @@
+numpy
+Pillow
+scikit-image
+matplotlib
+numba
+rembg

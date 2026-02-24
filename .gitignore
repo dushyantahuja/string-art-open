@@ -1,0 +1,11 @@
+# Ignore all images except example.png
+images/*
+!images/example.png
+
+# Ignore all results except example
+results/recent/*
+results/library/*
+!results/library/example/
+!results/library/example/**
+
+__pycache__
