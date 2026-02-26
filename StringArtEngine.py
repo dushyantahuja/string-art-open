@@ -194,8 +194,7 @@ class StringArtEngine(StringArtUtils):
         self,
         sequence,
     ):
-        nail_circle_diameter_mm = self.board_diameter_mm
-        mm_per_pixel = nail_circle_diameter_mm / self.resolution
+        mm_per_pixel = self.board_diameter_mm / self.resolution
         total_length_mm = 0.0
 
         prev_idx = sequence[0]
@@ -322,7 +321,7 @@ class StringArtEngine(StringArtUtils):
             "easel": {"brightness": 1.2,  "tint": (1.0, 1.0, 1.0)},
         }
 
-        plain_render = self.render_from_sequence(sequence, self.nail_coords, self.board_diameter_mm)
+        plain_render = self.render_from_sequence(sequence)
 
         # Helper to apply lighting based on preset name
         def render_with_lighting(name):
@@ -341,54 +340,44 @@ class StringArtEngine(StringArtUtils):
         return previews, plain_render
          
     def render_from_sequence(
-            self,
-            sequence,
-            nail_coords,
-            board_diameter_mm,
-            render_resolution=1000,                
-            supersample = 3, # 2 (good) or 3 (best)
-            jitter_mm=2.5, # 2-3, removes aliasing
+        self,
+        sequence,
+        render_resolution=1000, # 1000-1500                
+        supersample = 3,  # 2 (good) or 3 (best)
+        jitter_mm=2.5,    # 2-3, removes aliasing
         ):
         """     
-        2-3s
         Render a high-quality string art preview from a nail sequence.
         Uses line_aa and a 0-1 float canvas which enables control of darkness by line_strength.
-        Uses a larger resolution than generation canvas and has jitter.
+        Generates nail_coords directly at supersampled resolution.
         """
         
         W = render_resolution * supersample
-        mm_2_px = W / board_diameter_mm
+        mm_2_px = W / self.board_diameter_mm
         
-        # Determine correct line strength for the thread type, resolution and board diameter
-        line_strength = self.kThread * W/500 * 480/board_diameter_mm
+        # --- Generate nail coordinates directly at supersampled resolution ---
+        nail_coords = self.create_nail_positions(self.num_nails, W, self.pattern)
+        
+        # Determine correct line strength for the thread type, resolution, and board diameter
+        line_strength = self.kThread * W / 500 * 480 / self.board_diameter_mm
 
-        # Background canvas (float [0,1])
+        # Background canvas
         canvas = np.ones((W, W), dtype=np.float32)
 
-        # Convert nail pixel coords -> supersampled float coords
-        def to_px_float(yx):
-            y, x = yx
-            return (
-                (x + 0.5) * (W / self.resolution),
-                (y + 0.5) * (W / self.resolution)
-            )
-            
-        # Draw nail discs
+        # --- Draw nail discs ---
         nail_radius_mm = 1.5  
         nail_radius_px = nail_radius_mm * mm_2_px
 
-        for yx in nail_coords:
-            px, py = to_px_float(yx)
-
-            cy = int(round(py))
-            cx = int(round(px))
+        for y, x in nail_coords:
+            cy = int(round(y))
+            cx = int(round(x))
             r = int(round(nail_radius_px))
             if r <= 0:
                 continue
             rr, cc = disk((cy, cx), r, shape=canvas.shape)
             canvas[rr, cc] = 0
 
-        # Jitter in pixels (convert mm → pixels)
+        # --- Jitter in pixels ---
         max_jitter_px = jitter_mm * mm_2_px
         def jitter(p):
             return (
@@ -396,46 +385,32 @@ class StringArtEngine(StringArtUtils):
                 p[1] + random.uniform(-max_jitter_px, max_jitter_px)
             )
 
+        # --- Draw lines ---
         prev_idx = sequence[0]
         for idx in sequence[1:]:
-            p0 = to_px_float(nail_coords[prev_idx])
-            p1 = to_px_float(nail_coords[idx])
+            p0_j = jitter(nail_coords[prev_idx])
+            p1_j = jitter(nail_coords[idx])
 
-            # Apply sub-pixel jitter
-            p0_j = jitter(p0)
-            p1_j = jitter(p1)
-
-            # Convert to integer pixel coordinates for line_aa
-            y0, x0 = int(round(p0_j[1])), int(round(p0_j[0]))
-            y1, x1 = int(round(p1_j[1])), int(round(p1_j[0]))
+            y0, x0 = int(round(p0_j[0])), int(round(p0_j[1]))
+            y1, x1 = int(round(p1_j[0])), int(round(p1_j[1]))
 
             rr, cc, val = line_aa(y0, x0, y1, x1)
 
-            # Clip to canvas bounds (necessary with jitter)
-            valid = (
-                (rr >= 0) & (rr < W) &
-                (cc >= 0) & (cc < W)
-            )
-            rr = rr[valid]
-            cc = cc[valid]
-            val = val[valid]
+            valid = (rr >= 0) & (rr < W) & (cc >= 0) & (cc < W)
+            rr, cc, val = rr[valid], cc[valid], val[valid]
 
-            # Apply the line
             canvas[rr, cc] = np.clip(canvas[rr, cc] - line_strength * val, 0, 1)
-
             prev_idx = idx
 
-        # Convert canvas back to PIL image
-        img = Image.fromarray((canvas * 255).astype(np.uint8)).convert("RGB")
-        
-        # Downsample for anti-aliasing
+        # --- Convert canvas to PIL image ---
+        img = Image.fromarray((canvas * 255).astype(np.uint8)).convert("RGBA")
+
+        # --- Downsample for anti-aliasing ---
         if supersample > 1:
-            img = img.resize(
-                (render_resolution, render_resolution),
-                resample=Image.LANCZOS
-            )
-        img = img.convert("RGBA")    
+            img = img.resize((render_resolution, render_resolution), resample=Image.LANCZOS)
+
+        # --- Optional circular crop ---
         if self.pattern == "circle":
             img = self.circular_crop_rgba(img)
-            
+
         return img
