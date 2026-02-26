@@ -13,7 +13,7 @@ class StringArtUtils():
        pass
    
     @staticmethod
-    def create__nail_positions(num_nails, diameter_px, pattern):
+    def create_nail_positions(num_nails, diameter_px, pattern):
         """
         Generate nail positions for different patterns: circular or square
         Uses a very small margin to inset the nails from edge
@@ -70,12 +70,12 @@ class StringArtUtils():
             raise Exception("Invalid pattern")
     
     @staticmethod 
-    def precompute_line_profiles(NAIL_COORDS):
+    def precompute_line_profiles(nail_coords):
         """
         Line profiles with no python objects, smaller and suitable for numba compiler
         Works with any pattern
         """
-        num_nails = len(NAIL_COORDS)
+        num_nails = len(nail_coords)
 
         # Calculate valid pairs on nail indices without repetition
         valid_pairs = []
@@ -86,8 +86,8 @@ class StringArtUtils():
         # Precompute all lines and count total pixels
         total_pixels = 0
         for (i, j) in valid_pairs:
-            yi, xi = NAIL_COORDS[i]
-            yj, xj = NAIL_COORDS[j]
+            yi, xi = nail_coords[i]
+            yj, xj = nail_coords[j]
             rr, cc, val = line_aa(yi, xi, yj, xj)
             total_pixels += len(rr)
 
@@ -105,8 +105,8 @@ class StringArtUtils():
         idx = 0
         line_id = 0
         for (i, j) in valid_pairs:
-            yi, xi = NAIL_COORDS[i]
-            yj, xj = NAIL_COORDS[j]
+            yi, xi = nail_coords[i]
+            yj, xj = nail_coords[j]
             rr, cc, val = line_aa(yi, xi, yj, xj)
 
             L = len(rr)
@@ -133,48 +133,71 @@ class StringArtUtils():
         }
 
     @staticmethod
-    def make_template():
+    def make_template(nail_coords):
         """
-        slice to your desired physical size in rasterbator.net
-        with 10mm margin and 5mm overlap
+        Generate printable nail placement template for arbitrary shapes.
+
+        nail_coords: list of (row, col) in generation resolution (e.g. 500x500)
         """
-        RESOLUTION = 3000 # DON'T CHANGE
-        NUM_NAILS = 200
-        NAIL_PADDING = 90 # 90/3000 * 50 = 1.5cm padding (47cm inner diameter)
+        RESOLUTION = 3000  # DON'T CHANGE
+        PADDING = 70 # DON'T CHANGE
         NAIL_RADIUS_VISUAL = 6
 
         canvas = np.ones((RESOLUTION, RESOLUTION), dtype=np.float32)
 
-        # --- Standalone nail coordinate generator ---
-        center_r = RESOLUTION // 2
-        center_c = RESOLUTION // 2
-        radius = RESOLUTION // 2 - NAIL_PADDING
+        # --- convert input nail coords to numpy ---
+        nail_coords = np.asarray(nail_coords, dtype=np.float32)
 
-        NAIL_COORDS = []
-        for i in range(NUM_NAILS):
-            theta = 2 * np.pi * i / NUM_NAILS
-            r = center_r + radius * np.sin(theta)
-            c = center_c + radius * np.cos(theta)
-            NAIL_COORDS.append((int(r), int(c)))
+        # --- determine bounding box in source space ---
+        min_r, min_c = nail_coords.min(axis=0)
+        max_r, max_c = nail_coords.max(axis=0)
 
-        # Add nails to visual canvas
-        for r_nail, c_nail in NAIL_COORDS:
-            rr_nail, cc_nail = disk((r_nail, c_nail), NAIL_RADIUS_VISUAL, shape=canvas.shape)
-            canvas[rr_nail, cc_nail] = 0
+        src_h = max_r - min_r
+        src_w = max_c - min_c
+        src_size = max(src_h, src_w)
+
+        # --- scale to fit nicely inside template ---
+        target_size = RESOLUTION - 2 * PADDING
+        scale = target_size / src_size
+
+        # --- center in destination ---
+        dst_center = RESOLUTION / 2
+        src_center_r = (min_r + max_r) / 2
+        src_center_c = (min_c + max_c) / 2
+
+        nail_coords_scaled = []
+        for r, c in nail_coords:
+            r_s = (r - src_center_r) * scale + dst_center
+            c_s = (c - src_center_c) * scale + dst_center
+            nail_coords_scaled.append((int(round(r_s)), int(round(c_s))))
+
+        nail_coords_scaled = np.asarray(nail_coords_scaled)
+
+        # --- draw nails ---
+        for r_nail, c_nail in nail_coords_scaled:
+            rr, cc = disk((r_nail, c_nail), NAIL_RADIUS_VISUAL, shape=canvas.shape)
+            canvas[rr, cc] = 0
 
         dpi = 200
-        h, w = canvas.shape[:2]
+        h, w = canvas.shape
         fig = plt.figure(figsize=(w / dpi, h / dpi), dpi=dpi)
         ax = fig.add_axes([0, 0, 1, 1])
-        ax.imshow(canvas, cmap='gray', interpolation='nearest')
-        ax.axis('off')
+        ax.imshow(canvas, cmap="gray", interpolation="nearest")
+        ax.axis("off")
 
-        # Label nails correctly with connector lines
-        for idx, (r_nail, c_nail) in enumerate(NAIL_COORDS):
+        # --- centroid for label direction ---
+        center_r = nail_coords_scaled[:, 0].mean()
+        center_c = nail_coords_scaled[:, 1].mean()
+
+        # --- label nails ---
+        for idx, (r_nail, c_nail) in enumerate(nail_coords_scaled):
             dr = center_r - r_nail
             dc = center_c - c_nail
 
             length = np.hypot(dr, dc)
+            if length == 0:
+                continue
+
             dr /= length
             dc /= length
 
@@ -182,45 +205,44 @@ class StringArtUtils():
             r_text = r_nail - dr * offset
             c_text = c_nail - dc * offset
 
-            # --- draw thin connector line ---
+            # connector line
             ax.plot(
                 [c_nail, c_text],
                 [r_nail, r_text],
-                color='black',
+                color="black",
                 linewidth=0.2,
             )
 
-            # --- draw label ---
-            # --- label style rules ---
+            # label style rules (unchanged)
             if idx % 50 == 0:
-                fontweight = 'bold'
+                fontweight = "bold"
                 fontsize = 10
             elif idx % 10 == 0:
-                fontweight = 'bold'
+                fontweight = "bold"
                 fontsize = 8
             else:
-                fontweight = 'normal'
+                fontweight = "normal"
                 fontsize = 6
 
-            # --- draw label ---
             ax.text(
-                c_text, r_text,
+                c_text,
+                r_text,
                 str(idx),
-                color='black',
+                color="black",
                 fontsize=fontsize,
                 fontweight=fontweight,
-                ha='center',
-                va='center',
+                ha="center",
+                va="center",
                 bbox=dict(
-                    facecolor='white',
-                    edgecolor='none',
-                    pad=0.4
-                )
+                    facecolor="white",
+                    edgecolor="none",
+                    pad=0.4,
+                ),
             )
 
         fig.savefig("canvas_with_labels.png", dpi=200)
         plt.close(fig)
-
+    
     @staticmethod
     def draw_importance_mask(target: np.ndarray, importance=None, max_val = 5.0) -> np.ndarray:
         """

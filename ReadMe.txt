@@ -32,18 +32,21 @@ number_reader: simple UI for reading sequence (helpful for actually stringing)
 assets
     - line_porfiles_500.npy: pre computed anti-aliased line profiles (rows,cols,vals), 150Mb
     (will be created on the first generation, then reused)
-    - nail_template.png: full size nail template
-    - nail_template_sliced.pdf: sliced for 50cm board diameter
-    - template_board.jpeg: template for rendering to show realistic result on real board (200 nails 50cm diameter)
+    - nail_template_circle.png: full size nail template
+    - nail_template_circle_sliced.pdf: sliced for 50cm board diameter
+    (same for square for 50cm side length)
+    - template_easel.png: high res template for rendering results (you can use your own too!)
 
 ========================================================================================================
 Technical details and usage:
+
+* To make new nail templates, uncomment relevant block in main.py, then slice them to your desired size 
+at rasterbator.net with 10mm margin and 5mm overlap (final size is with margins cut away)
 
 * This string art generator has been developed by correlating physical results to model parameters, 
 the best thread type: 0.1mm nylon monofilament. With this thread you should aim for 3.5-4.5k lines for 50cm board
 
 * You can use a different thread type, but it will not be correlated so results might not be accurate
-* See how I've correlated the nylon thread and adapt to your needs if you really must use a thicker thread
 
 * Resolution of input image to generator does not need to be above 500x500px. String art
 cannot achieve higher than 200-300px resolution, so input doesn't need to be more
