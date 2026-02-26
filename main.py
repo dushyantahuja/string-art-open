@@ -25,11 +25,11 @@ use_importance = False # draw an importance mask to highlight detail in the str
 ######################################################################################################
 # Useful utilities (uncomment whichever one you need)
 
-# Use this to make nail templates (select pattern and number of nails above)
-# (physical size depends on how you slice it - use rasterbater.net with 10mm margin and 5mm overlap)
-nail_coords = Engine.create_nail_positions(Engine.num_nails, 3000, Engine.pattern) # need higher resolution for nail coords
-Engine.make_template(nail_coords)
-quit()
+# # Use this to make nail templates (select pattern and number of nails above)
+# # (physical size depends on how you slice it - use rasterbater.net with 10mm margin and 5mm overlap)
+# nail_coords = Engine.create_nail_positions(Engine.num_nails, 3000, Engine.pattern) # need higher resolution for nail coords
+# Engine.make_template(nail_coords)
+# quit()
 
 # # Use this to make new line profiles (then put in assets)
 # profiles = Engine.precompute_line_profiles(Engine.nail_coords)
