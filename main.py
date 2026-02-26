@@ -1,5 +1,4 @@
 from StringArtEngine import StringArtEngine
-from StringArtUtils import StringArtUtils
 import time
 from PIL import Image
 import numpy as np
@@ -9,23 +8,30 @@ import os
 
 image_name = 'example.png' # in images folder
  
-Utils = StringArtUtils()
-Engine = StringArtEngine(background_removal= False, # additional setup parameters are in StringArtEngine __init__
+Engine = StringArtEngine(
+                         # image preprocessing
+                         background_removal= False, # additional setup parameters are in StringArtEngine __init__
                          background_color= 100, # 100, if we remove background, replace with this shade (255=white)
                          darkening= 0.8, # 0.8, darkening image can improve accuracy
+                                              
+                         # physical correlation
+                         thread_type="nylon", # 0.1mm nylon monofilament
+                         board_diameter_mm=480, # adjust this to your desired string art size
+                         num_nails=200, # 180-240 total number of nails
+                         pattern='circle', # circle, square
                          )
-use_importance = False # draw an importance mask to highlight detail in string art
+use_importance = False # draw an importance mask to highlight detail in the string art
 
 ######################################################################################################
-# Useful utilities
+# Useful utilities (uncomment whichever one you need)
 
-# # Use this to make new line profiles (then put in assets)
-# profiles = Utils.precompute_line_profiles(Engine.nail_coords)
-# np.save(f'line_profiles_{Engine.resolution}.npy',profiles)
+# # Use this to make nail templates (i.e. for printing out and placing nails)
+# Engine.make_template()
 # quit()
 
-# # Use this to make nail templates
-# Utils.make_template()
+# # Use this to make new line profiles (then put in assets)
+# profiles = Engine.precompute_line_profiles(Engine.nail_coords)
+# np.save(f'line_profiles_{Engine.resolution}.npy',profiles)
 # quit()
 
 # # Use this to generate a preview from a sequence
@@ -59,7 +65,7 @@ if use_importance:
         importance = np.load("results/recent/importance.npy") # try to load the last used mask
     except:  
         importance = np.ones_like(target, dtype=np.float32)    
-    importance = Utils.draw_importance_mask(target, importance)
+    importance = Engine.draw_importance_mask(target, importance)
 else:
     importance = np.ones_like(target, dtype=np.float32)
 
@@ -74,9 +80,15 @@ t4 = time.time()
 
 # Save original image
 square_img = Image.fromarray(Engine.largest_square(np.array(original_image)))
-square_img.convert('RGB').save("results/recent/original_image_square.jpeg")
-circle_img = Engine.circular_crop_rgba(square_img)
-circle_img.save("results/recent/original_image_circle.png")
+square_img.convert('RGB').save("results/recent/original_image.jpeg")
+if Engine.pattern == "circle":
+    circle_img = Engine.circular_crop_rgba(square_img)
+    circle_img.save("results/recent/original_image_circle.png")
+else:
+    try:
+        os.remove("results/recent/original_image_circle.png")
+    except:
+        pass
 # Save target
 target_img = Image.fromarray((target * 255).astype(np.uint8))
 target_img.convert('L').save('results/recent/processed_target.jpeg', format="jpeg")

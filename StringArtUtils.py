@@ -2,18 +2,79 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from skimage.draw import line_aa, disk
+from PIL import Image, ImageDraw
 
 class StringArtUtils():
     """
-    Utility functions for string art process.
-    i.e. anything not in StringArtEngine.
+    Utility functions for string art process
+    i.e. anything not in StringArtEngine
     """
-    def __init__(self):
-        super().__init__()
-       
+    def __init__(self):  
+       pass
+   
+    @staticmethod
+    def create__nail_positions(num_nails, diameter_px, pattern):
+        """
+        Generate nail positions for different patterns: circular or square
+        Uses a very small margin to inset the nails from edge
+        """
+        nails = []
+
+        rMargin = 0.993
+        inset_px = (1.0 - rMargin) * diameter_px / 2
+
+        inner_diameter = round(diameter_px * rMargin)
+        inner_radius = inner_diameter / 2
+
+        if pattern == 'circle':
+            for i in range(num_nails):
+                theta = 2 * np.pi * i / num_nails
+
+                # Generate in inner coordinate system
+                y = inner_radius * (1 + np.sin(theta))
+                x = inner_radius * (1 + np.cos(theta))
+
+                # Recenter into full canvas
+                y += inset_px
+                x += inset_px
+
+                nails.append((int(round(y)), int(round(x))))
+
+            return nails
+
+        elif pattern == 'square':
+            side = inner_diameter - 1
+            perimeter = 4 * side
+
+            for i in range(num_nails):
+                p = int(i * perimeter / num_nails)
+
+                if p < side:                      # top
+                    y, x = 0, p
+                elif p < 2 * side:                # right
+                    y, x = p - side, side
+                elif p < 3 * side:                # bottom
+                    y, x = side, side - (p - 2 * side)
+                else:                             # left
+                    y, x = side - (p - 3 * side), 0
+
+                # Recenter
+                y += inset_px
+                x += inset_px
+
+                nails.append((int(round(y)), int(round(x))))
+
+            return nails
+
+        else:
+            raise Exception("Invalid pattern")
+    
     @staticmethod 
     def precompute_line_profiles(NAIL_COORDS):
-        # Line profiles with no python objects, smaller and suitable for numba compiler
+        """
+        Line profiles with no python objects, smaller and suitable for numba compiler
+        Works with any pattern
+        """
         num_nails = len(NAIL_COORDS)
 
         # Calculate valid pairs on nail indices without repetition
@@ -73,8 +134,10 @@ class StringArtUtils():
 
     @staticmethod
     def make_template():
-        # slice to 50cm in rasterbator.net
-        # with 10mm margin and 5mm overlap
+        """
+        slice to your desired physical size in rasterbator.net
+        with 10mm margin and 5mm overlap
+        """
         RESOLUTION = 3000 # DON'T CHANGE
         NUM_NAILS = 200
         NAIL_PADDING = 90 # 90/3000 * 50 = 1.5cm padding (47cm inner diameter)
@@ -293,4 +356,19 @@ class StringArtUtils():
         plt.show()
 
         return importance.astype(np.float32)
+    
+    @staticmethod
+    def circular_crop_rgba(image, bgcolor=(0, 0, 0, 0)):
+        """
+        Input and output are PIL images
+        """
+        w, h = image.size
+        assert w == h, "Image must be square for circular crop (use largest square first)"
+        mask = Image.new("L", (w, h), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, w, h), fill=255)
+        image = image.convert("RGBA")
+        result = Image.new("RGBA", (w, h), bgcolor)
+        result.paste(image, (0, 0), mask)
+        return result
     

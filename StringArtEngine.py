@@ -1,46 +1,13 @@
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image
 from skimage import color, exposure
 from skimage.transform import resize
-from skimage.draw import line_aa
+from skimage.draw import line_aa, disk
 from importlib import resources
 import random
 import numba
-import sys
 from pathlib import Path
-from rembg import remove # can comment this out if you don't need background removal
-
-# this is just so we don't need a duplicated assets folder in base directory (when running main.py)
-API_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(API_ROOT))
-
-def load_line_profiles(resolution, nail_coords):
-    name = f"line_profiles_{resolution}.npy"
-    assets_path = Path(resources.files("assets"))
-    file_path = assets_path / name
-    
-    if not file_path.exists():
-        print("Line profiles not found — computing and saving")
-        from StringArtUtils import StringArtUtils
-        profiles = StringArtUtils.precompute_line_profiles(nail_coords)
-        assets_path.mkdir(parents=True, exist_ok=True)
-        np.save(file_path, profiles)
-    else:
-        print("Loaded line profiles")
-
-    return np.load(file_path, allow_pickle=True).item()
-
-def load_templates():
-    print('Loaded preview templates')
-    def load(name):
-        with resources.files(
-            "assets"
-        ).joinpath(name).open("rb") as f:
-            return Image.open(f).convert("RGBA")
-
-    return {
-        "wall": load("template_wall.jpeg"),
-    }
+from StringArtUtils import StringArtUtils
     
 @numba.njit
 def generate_sequence_numba_func(
@@ -126,24 +93,26 @@ def generate_sequence_numba_func(
 
     return path[:path_len]
 
-class StringArtEngine:
+class StringArtEngine(StringArtUtils):
     """
     Main functions and algorithm for string art generation.
-    One instance per request.
+    Use the StringArtUtils superclass for additional functions.
     """
 
     def __init__(self, 
-                 background_removal = False,
-                 background_color = 100, # 80-140   
-                 darkening = 0.8, # 0.7-0.9
-                 clip_limit = 0.02, # 0.02-0.04
-                 thread_type = 'nylon',
-                 max_lines = 5500,     
-                 board_diameter_mm = 480,
-                 num_nails = 200,
-                 min_distance = 15,
-                 resolution = 500,
+                 background_removal = False, 
+                 background_color = 100, # 80-140, changes background shade
+                 darkening = 0.8, # 0.7-0.9, improves results quite a lot
+                 clip_limit = 0.02, # 0.02-0.04, CLAHE image preprocessing, doesn't need changing
+                 thread_type = 'nylon', # 0.1mm nylon monofilament
+                 max_lines = 5500, # will break before this when improvement stops
+                 board_diameter_mm = 480, # can change for your needs
+                 num_nails = 200, # total
+                 min_distance = 15, # consecutive indices in sequence must be this far apart to avoid short paths
+                 resolution = 500, # 500 - don't change, it won't make string art any better unless canvas is huge
+                 pattern = 'circle', # circle, square
                  ):
+        super().__init__()
         self.background_removal = background_removal
         self.background_color = background_color
         self.clip_limit = clip_limit
@@ -154,20 +123,20 @@ class StringArtEngine:
         self.num_nails = num_nails
         self.min_distance = min_distance
         self.resolution = resolution  
+        self.pattern = pattern
         
         # Thread correlations (correlated at 500 resolution and with 480mm board diameter)
-        self.kNylon = 0.075 # 0.1mm nylon monofilament
-        self.kPoly = 0.3 # 40/2 thin polyester thread
-
-        if self.thread_type == "nylon": 
-            self.line_strength = self.kNylon * self.resolution/500 * 480/board_diameter_mm
-        elif self.thread_type == "poly": 
-            self.line_strength = self.kPoly * self.resolution/500 * 480/board_diameter_mm
+        if self.thread_type == "nylon": # 0.1mm nylon monofilament
+            self.kThread = 0.075
+            self.line_strength = self.kThread * self.resolution/500 * 480/board_diameter_mm
+        elif self.thread_type == "poly": # 40/2 thin polyester thread
+            self.kThread = 0.3
+            self.line_strength = self.kThread * self.resolution/500 * 480/board_diameter_mm
         else:
             raise ValueError("Invalid thread type")
         
         if self.resolution not in [500]:
-            raise ValueError('Incorrect resolution')
+            raise ValueError("Don't change resulution unless you are using a very large canvas")
         
         # Precompute valid candidate nails for each nail index (using min distance constraint)
         self.candidate_nails = [
@@ -178,9 +147,36 @@ class StringArtEngine:
             for i in range(self.num_nails)]
         
         # Calculate nail coordinates and load in line profiles and templates
-        self.nail_coords = self.create_circle_nail_positions(self.num_nails, self.resolution // 2)
-        self.line_profiles = load_line_profiles(self.resolution, self.nail_coords)
-        self.templates = load_templates()
+        self.nail_coords = self.create__nail_positions(self.num_nails, self.resolution, self.pattern)
+        self.line_profiles = self.load_or_make_line_profiles(self.resolution, self.pattern, self.nail_coords)
+        self.templates = self.load_templates()
+    
+    def load_or_make_line_profiles(self, resolution, pattern, nail_coords):
+        name = f"line_profiles_{pattern}_{resolution}.npy"
+        assets_path = Path(resources.files("assets"))
+        file_path = assets_path / name
+        
+        if not file_path.exists():
+            print("Line profiles not found — computing and saving new ones")
+            profiles = self.precompute_line_profiles(nail_coords)
+            assets_path.mkdir(parents=True, exist_ok=True)
+            np.save(file_path, profiles)
+        else:
+            print("Loaded line profiles")
+
+        return np.load(file_path, allow_pickle=True).item()
+
+    def load_templates(self):
+        print('Loaded preview templates')
+        def load(name):
+            with resources.files(
+                "assets"
+            ).joinpath(name).open("rb") as f:
+                return Image.open(f).convert("RGBA")
+
+        return {
+            "easel": load("template_easel.png"),
+        }
     
     def largest_square(self, image):
         """
@@ -193,17 +189,6 @@ class StringArtEngine:
         else:
             s = (h - w) // 2
             return image[s : s + w, :]
-        
-    def create_circle_nail_positions(self, num_nails, radius_px):
-        nails = []
-        for i in range(num_nails):
-            theta = 2 * np.pi * i / num_nails
-            y = int(radius_px * (1 + np.sin(theta)))
-            x = int(radius_px * (1 + np.cos(theta)))
-            y = np.clip(y, 0, self.resolution - 1)
-            x = np.clip(x, 0, self.resolution - 1)
-            nails.append((y, x))
-        return nails
     
     def compute_string_length_km(
         self,
@@ -242,6 +227,7 @@ class StringArtEngine:
         
         # 1. Background removal (must come first to work effectively)
         if self.background_removal:
+            from rembg import remove 
             rgba = remove(image_rgb, bgcolor=(self.background_color,)*3)
             rgb = rgba.convert("RGB")
         else:
@@ -269,73 +255,6 @@ class StringArtEngine:
         target *= self.darkening
                  
         return target # np array, 0-1
-        
-    def generate_sequence(self, target):
-        """
-        If possible, use generate_sequence_numba instead (5x faster and same sequence)
-        """
-        residual = np.ones_like(target, dtype=np.float32) - target # white canvas minus target
-
-        current = 0
-        path = []
-        candidate_nails = self.candidate_nails
-        line_strength = self.line_strength
-        line_profiles = self.line_profiles
-
-        while True:
-            best = None
-            best_imp = 0.0
-
-            for i in candidate_nails[current]:
-                line_id = line_profiles["map"][current, i]
-                if line_id < 0:
-                    continue
-
-                start = line_profiles["start"][line_id]
-                end   = line_profiles["end"][line_id]
-
-                rr  = line_profiles["rr"][start:end]
-                cc  = line_profiles["cc"][start:end]
-                val = line_profiles["val"][start:end]
-
-                # improvement formula
-                # before = canvas[rr, cc] 
-                # after = before - line_strength * val
-                # target_slice = target[rr,cc]
-                # imp = np.sum((before - target_slice) ** 2 - (after - target_slice) ** 2)
-                
-                # simplifies!
-                # sub in r = before - target_slice
-                # imp = sum(r^2 - (r - line_strength*val)^2) 
-                #     = sum(2*r*line_strength*val - (line_strength*val)^2)
-                #     = 2*line_strength*sum(r*val) - line_strength^2 * sum(val^2)
-                r = residual[rr, cc]  # residual along the line profile
-                dot_r_val = np.dot(r, val) # sum(r * val)
-                sum_val_sq = np.dot(val, val) # sum(val^2)
-                imp = 2 * line_strength * dot_r_val - (line_strength**2) * sum_val_sq
-
-                if imp > best_imp:
-                    best_imp = imp
-                    best = i
-
-            if best is None or len(path) >= self.max_lines:
-                break
-            
-            # Update the residual with the line
-            line_id = line_profiles["map"][current, best]
-            start = line_profiles["start"][line_id]
-            end   = line_profiles["end"][line_id]
-
-            rr  = line_profiles["rr"][start:end]
-            cc  = line_profiles["cc"][start:end]
-            val = line_profiles["val"][start:end]
-
-            residual[rr, cc] -= np.clip(line_strength * val,-1,1)
-
-            path.append(best)
-            current = best
-
-        return path
 
     def generate_sequence_numba(self, target, use_importance = False, importance = 0):
         """
@@ -365,46 +284,26 @@ class StringArtEngine:
     # Preview generation
     # --------------------------------------------------
 
-    def circular_crop_rgba(self, image, bgcolor=(0, 0, 0, 0)):
+    def place_on_template(self, template, coords, art):
         """
-        Input and output are PIL images
-        """
-        w, h = image.size
-        assert w == h, "Image must be square for circular crop"
-        mask = Image.new("L", (w, h), 0)
-        draw = ImageDraw.Draw(mask)
-        draw.ellipse((0, 0, w, h), fill=255)
-        image = image.convert("RGBA")
-        result = Image.new("RGBA", (w, h), bgcolor)
-        result.paste(image, (0, 0), mask)
-        return result
-
-    def place_on_template(self, template, coords, art, feather_px=3):
-        """
-        Place art on template with blurred edges for a seamless transition
+        Place art on template
         """
         (cx, cy), diameter = coords
-        art_resized = art.resize((diameter, diameter), Image.LANCZOS).convert("RGBA")
-        mask = Image.new("L", (diameter, diameter), 0)
-        draw = ImageDraw.Draw(mask)
-        draw.ellipse(
-            (
-                feather_px,
-                feather_px,
-                diameter - feather_px,
-                diameter - feather_px,
-            ),
-            fill=255,
-        )
-        mask = mask.filter(ImageFilter.GaussianBlur(feather_px))
-        art_resized.putalpha(mask)
+
+        # Resize while preserving alpha
+        art_resized = art.resize(
+            (diameter, diameter),
+            resample=Image.LANCZOS
+        ).convert("RGBA")
+
         x = int(cx - diameter / 2)
         y = int(cy - diameter / 2)
-        composite = template.copy()
-        composite.alpha_composite(art_resized, (x, y))
-        return composite
 
-    
+        composite = template.copy().convert("RGBA")
+        composite.alpha_composite(art_resized, (x, y))
+
+        return composite
+   
     def apply_lighting(self, render, brightness=1.0, tint=(1.0, 1.0, 1.0)):
         arr = np.array(render, dtype=np.float32) / 255.0
         rgb = arr[..., :3]
@@ -416,14 +315,14 @@ class StringArtEngine:
         return Image.fromarray((out * 255).astype(np.uint8), mode="RGBA")
     
     def render_all_previews(self, sequence):
-        # Define circle coordinates (center (x,y from top left), diameter)
-        template_wall_coords    = ([1515, 2210], 1225)
+        # Define template coordinates (center (x,y from top left), diameter)
+        template_easel_coords = ([1260, 1024], 850)
 
         LIGHTING = {
-            "wall":    {"brightness": 0.75, "tint": (1.05, 1.02, 0.95)},
+            "easel": {"brightness": 1.2,  "tint": (1.0, 1.0, 1.0)},
         }
 
-        plain_render = self.render_from_sequence(sequence,self.nail_coords,thread_type=self.thread_type)
+        plain_render = self.render_from_sequence(sequence, self.nail_coords, self.board_diameter_mm)
 
         # Helper to apply lighting based on preset name
         def render_with_lighting(name):
@@ -434,8 +333,9 @@ class StringArtEngine:
                 tint=preset.get("tint", (1.0, 1.0, 1.0))
             )
 
+        # Can easily add more custom previews with different lighting (instructions in ReadMe)
         previews = {
-            "wall":    self.place_on_template(self.templates["wall"], template_wall_coords, render_with_lighting("wall")),
+            "easel": self.place_on_template(self.templates["easel"], template_easel_coords, render_with_lighting("easel")),
         }
 
         return previews, plain_render
@@ -443,30 +343,24 @@ class StringArtEngine:
     def render_from_sequence(
             self,
             sequence,
-            nail_positions,
-            thread_type="nylon",
-            render_resolution=1000,     
-            board_diameter_mm=480,
+            nail_coords,
+            board_diameter_mm,
+            render_resolution=1000,                
             supersample = 3, # 2 (good) or 3 (best)
-            jitter_mm=2,            
+            jitter_mm=2.5, # 2-3, removes aliasing
         ):
         """     
         2-3s
         Render a high-quality string art preview from a nail sequence.
         Uses line_aa and a 0-1 float canvas which enables control of darkness by line_strength.
-        Larger resolution than generation canvas and has jitter.
+        Uses a larger resolution than generation canvas and has jitter.
         """
         
         W = render_resolution * supersample
         mm_2_px = W / board_diameter_mm
         
         # Determine correct line strength for the thread type, resolution and board diameter
-        if thread_type == "nylon": 
-            line_strength = self.kNylon * W/500 * 480/board_diameter_mm
-        elif thread_type == "poly": 
-            line_strength = self.kPoly * W/500 * 480/board_diameter_mm
-        else:
-            raise ValueError("Invalid thread type")
+        line_strength = self.kThread * W/500 * 480/board_diameter_mm
 
         # Background canvas (float [0,1])
         canvas = np.ones((W, W), dtype=np.float32)
@@ -478,6 +372,21 @@ class StringArtEngine:
                 (x + 0.5) * (W / self.resolution),
                 (y + 0.5) * (W / self.resolution)
             )
+            
+        # Draw nail discs
+        nail_radius_mm = 1.5  
+        nail_radius_px = nail_radius_mm * mm_2_px
+
+        for yx in nail_coords:
+            px, py = to_px_float(yx)
+
+            cy = int(round(py))
+            cx = int(round(px))
+            r = int(round(nail_radius_px))
+            if r <= 0:
+                continue
+            rr, cc = disk((cy, cx), r, shape=canvas.shape)
+            canvas[rr, cc] = 0
 
         # Jitter in pixels (convert mm → pixels)
         max_jitter_px = jitter_mm * mm_2_px
@@ -489,8 +398,8 @@ class StringArtEngine:
 
         prev_idx = sequence[0]
         for idx in sequence[1:]:
-            p0 = to_px_float(nail_positions[prev_idx])
-            p1 = to_px_float(nail_positions[idx])
+            p0 = to_px_float(nail_coords[prev_idx])
+            p1 = to_px_float(nail_coords[idx])
 
             # Apply sub-pixel jitter
             p0_j = jitter(p0)
@@ -525,6 +434,8 @@ class StringArtEngine:
                 (render_resolution, render_resolution),
                 resample=Image.LANCZOS
             )
-
-        img = self.circular_crop_rgba(img)
+        img = img.convert("RGBA")    
+        if self.pattern == "circle":
+            img = self.circular_crop_rgba(img)
+            
         return img
