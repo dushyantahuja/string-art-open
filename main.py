@@ -6,22 +6,22 @@ import os
 
 ### Main string art generation script (this should do everything you need) ###
 
-image_name = 'example.png' # in images folder
- 
-Engine = StringArtEngine(
-                         # image preprocessing
-                         background_removal= False, # additional setup parameters are in StringArtEngine __init__
-                         background_color= 100, # 100, if we remove background, replace with this shade (255=white)
-                         darkening= 0.8, # 0.8, darkening image can improve accuracy
-                                              
-                         # physical correlation
-                         thread_type="nylon", # 0.1mm nylon monofilament
-                         board_diameter_mm=480, # adjust this to your desired string art size
-                         num_nails=200, # 180-240 total number of nails
-                         pattern='circle', # circle, square
-                         )
-use_importance = False # draw an importance mask to highlight detail in the string art
+image_name = 'example.png' # image must be in images folder
 
+# Specify your desired setup then simply run the file
+settings = {
+    # image preprocessing
+    "use_importance": True, # draw an importance mask to highlight detail in the string art
+    "background_removal": False, # additional setup parameters are in StringArtEngine __init__
+    "background_color": 100, # 100, if we remove background, replace with this shade (255=white)
+    "darkening": 0.8, # 0.8, darkening image can improve accuracy
+                        
+    # physical correlation and layout
+    "thread_type": "nylon", # 0.1mm nylon monofilament
+    "board_diameter_mm": 480, # adjust this to your desired string art size
+    "num_nails": 200, # 180-240 total number of nails
+    "pattern": 'circle', # circle or square
+}
 ######################################################################################################
 # Useful utilities (uncomment whichever one you need)
 
@@ -58,13 +58,23 @@ use_importance = False # draw an importance mask to highlight detail in the str
 # Main function calls 
 
 t0 = time.time()
+Engine = StringArtEngine(
+                         background_removal= settings["background_removal"],
+                         background_color= settings["background_color"],
+                         darkening= settings["darkening"],
+                         thread_type= settings["thread_type"], 
+                         board_diameter_mm= settings["board_diameter_mm"],
+                         num_nails= settings["num_nails"], 
+                         pattern= settings["pattern"], 
+                         )
+use_importance = settings["use_importance"]
 original_image = Image.open('images/' + image_name)  
 target = Engine.preprocess(original_image) # Step 1, prepare image for string art generation
 t1 = time.time()
 
 if use_importance:
     try:
-        importance = np.load("results/recent/importance.npy") # try to load the last used mask
+        importance = np.load("results/recent/importance.npy")
     except:  
         importance = np.ones_like(target, dtype=np.float32)    
     importance = Engine.draw_importance_mask(target, importance)
@@ -109,7 +119,8 @@ for name, img in previews.items():
     img.convert('RGB').save(path, format="jpeg")
 plain_render.save('results/recent/final_render.png')
 # Save sequence
-np.savetxt("results/recent/sequence.txt", np.array([sequence]), fmt="%d", delimiter=",")
+np.savetxt("results/recent/sequence.txt", np.array([sequence]), fmt="%d", delimiter=",") # basic txt
+Engine.build_sequence_pdf(sequence, out_path="results/recent/sequence.pdf") # pdf version
 t5 = time.time()
 
 tPreprocess = round(t1-t0,2)
@@ -117,6 +128,6 @@ tGenerate = round(t3-t2,2)
 tRender = round(t4-t3,2)
 tSave = round(t5-t4,2)
 tTotal = round(tPreprocess + tGenerate + tRender + tSave,2)
-print(f'Preprocess: {tPreprocess}s, Generate: {tGenerate}s, Render: {tRender}s, Save: {tSave}s, TOTAL: {tTotal}s')
+print(f'Prepare: {tPreprocess}s, Generate: {tGenerate}s, Render: {tRender}s, Save: {tSave}s, TOTAL: {tTotal}s')
 print(f'Number of lines: {len(sequence)}')
 print('FINISHED - saved to results/recent')

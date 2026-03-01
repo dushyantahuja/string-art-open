@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from skimage.draw import line_aa, disk
 from PIL import Image, ImageDraw
+from typing import Iterable, List
+import io
+from reportlab.lib.pagesizes import LETTER
+from reportlab.pdfgen import canvas
 
 class StringArtUtils():
     """
@@ -69,6 +73,77 @@ class StringArtUtils():
         else:
             raise Exception("Invalid pattern")
     
+    @staticmethod
+    def get_candidate_nails(nail_coords, num_nails, min_distance, pattern):
+        """
+        Precompute valid candidate nails for each nail index.
+
+        Constraints:
+        1) minimum index distance with wraparound
+        2) geometry constraint:
+            - circle: none
+            - square: cannot connect nails on the same side
+
+        Returns:
+            int32 array of shape (num_nails, max_candidates)
+            padded with -1 (Numba compatible)
+        """
+
+        nail_coords = np.asarray(nail_coords, dtype=np.int32)
+
+        # --- classify square side for each nail ---
+        # sides: 0=top, 1=right, 2=bottom, 3=left
+        if pattern == "square":
+            min_y = nail_coords[:, 0].min()
+            max_y = nail_coords[:, 0].max()
+            min_x = nail_coords[:, 1].min()
+            max_x = nail_coords[:, 1].max()
+
+            side_of = np.empty(num_nails, dtype=np.int8)
+            for i, (y, x) in enumerate(nail_coords):
+                if y == min_y:
+                    side_of[i] = 0
+                elif x == max_x:
+                    side_of[i] = 1
+                elif y == max_y:
+                    side_of[i] = 2
+                else:
+                    side_of[i] = 3
+        else:
+            side_of = None  # unused for circle
+
+        candidate_nails = []
+
+        for i in range(num_nails):
+            row = []
+
+            for j in range(num_nails):
+                if i == j:
+                    continue
+
+                # --- constraint 1: min index distance with wraparound ---
+                d = abs(i - j)
+                if min(d, num_nails - d) <= min_distance:
+                    continue
+
+                # --- constraint 2: square side rule ---
+                if pattern == "square":
+                    if side_of[i] == side_of[j]:
+                        continue
+
+                row.append(j)
+
+            candidate_nails.append(row)
+
+        # --- convert to fixed-size NumPy array (Numba-safe) ---
+        max_len = max(len(r) for r in candidate_nails)
+        arr = np.full((num_nails, max_len), -1, dtype=np.int32)
+
+        for i, row in enumerate(candidate_nails):
+            arr[i, :len(row)] = row
+
+        return arr
+        
     @staticmethod 
     def precompute_line_profiles(nail_coords):
         """
@@ -394,3 +469,90 @@ class StringArtUtils():
         result.paste(image, (0, 0), mask)
         return result
     
+    @staticmethod
+    def build_sequence_pdf(sequence: Iterable[int], out_path=None) -> bytes:
+        milestone_headers = {
+        0: ["Getting Started..."],
+        500: ["In the Swing of Things"],
+        1000: ["This is fun!"],
+        1500: ["Can you see your image yet?"],
+        2000: ["Maybe halfway?"],
+        2500: ["Don't give up!"],
+        3000: ["So close..."],
+        3500: ["Endgame"],
+        4000: ["If you made it this far - well done"],
+        4500: ["Thats a lot of lines, most people won't see this"],
+        5000: ["Why does your string art have 5000 lines - is it a black image!?"]
+        }
+        closing_message = "Congrats on finishing your StringBoard! Please send me a photo! info@stringboard.co.uk"
+        
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=LETTER)
+        width, height = LETTER
+
+        numbers: List[int] = list(sequence)
+        milestone_headers = milestone_headers or {}
+
+        margin_x = 50
+        margin_y = 50
+        line_height = 14
+
+        y = height - margin_y
+
+        def ensure_space(lines: int):
+            nonlocal y
+            required = lines * line_height
+            if y < margin_y + required:
+                c.showPage()
+                c.setFont("Helvetica", 10)
+                y = height - margin_y
+
+        for block_start in range(0, len(numbers), 100):
+            block = numbers[block_start:block_start + 100]
+
+            # Main block header
+            ensure_space(3)
+            c.setFont("Helvetica-Bold", 12)
+            header = f"Lines {block_start + 1} – {block_start + len(block)}"
+            c.drawString(margin_x, y, header)
+            y -= 2 * line_height
+
+            # Optional milestone headers
+            if block_start in milestone_headers:
+                c.setFont("Helvetica-Oblique", 10)
+                for text in milestone_headers[block_start]:
+                    ensure_space(1)
+                    c.drawString(margin_x, y, text)
+                    y -= line_height
+                y -= line_height / 2
+
+            # Number rows: 5 × 20
+            c.setFont("Helvetica", 10)
+            for row_start in range(0, len(block), 20):
+                ensure_space(1)
+                row = block[row_start:row_start + 20]
+                line = ", ".join(map(str, row))
+                c.drawString(margin_x, y, line)
+                y -= line_height
+
+            y -= line_height  # spacing after block
+        
+        c.setFont("Helvetica-Oblique", 10)
+        
+        # Ensure space for message
+        if y < margin_y + line_height:
+            c.showPage()
+            c.setFont("Helvetica-Oblique", 10)
+            y = height - margin_y
+
+        c.drawString(margin_x, y, closing_message)
+        y -= line_height
+
+        c.save()
+        
+        if out_path is not None: # optionally save pdf directly
+            with open(out_path, "wb") as f:
+                f.write(buffer.getvalue())
+            
+        buffer.seek(0)
+        return buffer.read()

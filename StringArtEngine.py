@@ -36,10 +36,10 @@ def generate_sequence_numba_func(
 
         for k in range(candidate_nails.shape[1]):
             i = candidate_nails[current, k]
-            if i < 0:
+            if i < 0: # code for invalid index (too close or path clashes)
                 break
 
-            line_id = line_map[current, i]
+            line_id = line_map[current, i] # use this id to index the line profiles array
             if line_id < 0:
                 continue
 
@@ -138,16 +138,9 @@ class StringArtEngine(StringArtUtils):
         if self.resolution not in [500]:
             raise ValueError("Don't change resulution unless you are using a very large canvas")
         
-        # Precompute valid candidate nails for each nail index (using min distance constraint)
-        self.candidate_nails = [
-            [
-                j for j in range(self.num_nails)
-                if min(abs(i - j), self.num_nails - abs(i - j)) > self.min_distance
-            ]
-            for i in range(self.num_nails)]
-        
-        # Calculate nail coordinates and load in line profiles and templates
+        # Calculate nail coordinates and valid paths and load in line profiles and templates
         self.nail_coords = self.create_nail_positions(self.num_nails, self.resolution, self.pattern)
+        self.candidate_nails = self.get_candidate_nails(self.nail_coords, self.num_nails, self.min_distance, self.pattern)
         self.line_profiles = self.load_or_make_line_profiles(self.resolution, self.pattern, self.nail_coords)
         self.templates = self.load_templates()
     
@@ -208,14 +201,6 @@ class StringArtEngine(StringArtUtils):
             x0, y0 = x1, y1
         total_length_km = round(total_length_mm * 1e-6, 2)
         return total_length_km
-    
-    def candidate_nails_array(self):
-        # Helper for numba
-        max_len = max(len(row) for row in self.candidate_nails)
-        arr = np.full((self.num_nails, max_len), -1, dtype=np.int32)
-        for i, row in enumerate(self.candidate_nails):
-            arr[i, :len(row)] = row
-        return arr
 
     # --------------------------------------------------
     # Core algorithm
@@ -259,7 +244,6 @@ class StringArtEngine(StringArtUtils):
         """
         Numba compiled string art generator (~1s).
         """
-        candidate_arr = self.candidate_nails_array()
         if use_importance == False:
             importance = np.ones_like(target, dtype=np.float32) # safe deafult
 
@@ -267,7 +251,7 @@ class StringArtEngine(StringArtUtils):
             target,
             use_importance,
             importance, 
-            candidate_arr,
+            self.candidate_nails,
             self.line_profiles["rr"],
             self.line_profiles["cc"],
             self.line_profiles["val"],

@@ -1,10 +1,12 @@
 Author: Will Taylor
 Learn more: stringboard.co.uk
 
-An Open Source Python Based String Art Generation Repository
+A Better Open Source Python Based String Art Generation Repository
 * fast: 1-2s generation with numba compiler
 * accurate: previews correlated to real string art 
 * optimal: importance weighting, robust image preprocessing including background removal, optimal greedy algorithm
+
+![alt text](results/library/example/preview_easel.jpeg)
 
 SETUP AND DEPENDENCIES
 git clone https://github.com/StringBoardUK/string-art-open.git
