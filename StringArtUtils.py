@@ -315,11 +315,11 @@ class StringArtUtils():
                 ),
             )
 
-        fig.savefig("canvas_with_labels.png", dpi=200)
+        fig.savefig("results/recent/nail_template.png", dpi=200)
         plt.close(fig)
     
     @staticmethod
-    def draw_importance_mask(target: np.ndarray, importance=None, max_val = 5.0) -> np.ndarray:
+    def draw_importance_mask(target: np.ndarray, importance=None, max_val = 4.0) -> np.ndarray:
         """
         Interactive importance mask editor using matplotlib.
 

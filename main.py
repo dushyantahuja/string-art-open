@@ -5,6 +5,8 @@ import numpy as np
 import os
 
 ### Main string art generation script (this should do everything you need) ###
+# default path for saving project is results/recent
+# save a project by copying it into results/library/your_project
 
 image_name = 'example.png' # image must be in images folder
 
@@ -20,42 +22,13 @@ settings = {
     "thread_type": "nylon", # 0.1mm nylon monofilament
     "board_diameter_mm": 480, # adjust this to your desired string art size
     "num_nails": 200, # 180-240 total number of nails
-    "pattern": 'circle', # circle or square
+    "pattern": 'square', # circle or square
+    "save_template": True, # this will save a high res template for your setup
 }
-######################################################################################################
-# Useful utilities (uncomment whichever one you need)
+# after generation, you can use number_reader.py for tracking your progress (it will autosave your current index)
 
-# # Use this to make nail templates (select pattern and number of nails above)
-# # (physical size depends on how you slice it - use rasterbater.net with 10mm margin and 5mm overlap)
-# nail_coords = Engine.create_nail_positions(Engine.num_nails, 3000, Engine.pattern) # need higher resolution for nail coords
-# Engine.make_template(nail_coords)
-# quit()
-
-# # Use this to make new line profiles (then put in assets)
-# profiles = Engine.precompute_line_profiles(Engine.nail_coords)
-# np.save(f'line_profiles_{Engine.resolution}.npy',profiles)
-# quit()
-
-# # Use this to generate a preview from a sequence
-# sequence = np.loadtxt('results/recent/sequence.txt', delimiter=',', dtype=int)
-# previews, _ = Engine.render_all_previews(sequence)
-# for name, img in previews.items():
-#     img.convert("RGB").save(f'results/renders/high_quality_render_{name}.jpeg')
-# quit()
-
-# # Use this to convert image into png
-# img = Image.open("results/recent/preview_outside.jpeg")
-# img.convert("RGBA").save("pngimage.png")
-# quit()
-
-# # Use this for circular cropping
-# img = Image.open('images/test/image.png')
-# circular_img = Engine.circular_crop_rgba(img.convert("RGBA"))
-# circular_img.save("circular.png")
-# quit()
-
-#####################################################################################
-# Main function calls 
+################################################################################################
+# Main funtion calls
 
 t0 = time.time()
 Engine = StringArtEngine(
@@ -68,6 +41,7 @@ Engine = StringArtEngine(
                          pattern= settings["pattern"], 
                          )
 use_importance = settings["use_importance"]
+save_template = settings["save_template"]
 original_image = Image.open('images/' + image_name)  
 target = Engine.preprocess(original_image) # Step 1, prepare image for string art generation
 t1 = time.time()
@@ -77,11 +51,14 @@ if use_importance:
         importance = np.load("results/recent/importance.npy")
     except:  
         importance = np.ones_like(target, dtype=np.float32)    
+    print("Waiting for importance mask...")
     importance = Engine.draw_importance_mask(target, importance)
 else:
     importance = np.ones_like(target, dtype=np.float32)
 
+
 t2 = time.time()
+print("Generating...")
 sequence = Engine.generate_sequence_numba(target, use_importance, importance) # Step 2, generate sequence from image
 t3 = time.time()
 previews, plain_render = Engine.render_all_previews(sequence) # Step 3, turn sequence into accurate renders
@@ -121,6 +98,15 @@ plain_render.save('results/recent/final_render.png')
 # Save sequence
 np.savetxt("results/recent/sequence.txt", np.array([sequence]), fmt="%d", delimiter=",") # basic txt
 Engine.build_sequence_pdf(sequence, out_path="results/recent/sequence.pdf") # pdf version
+# Save template
+if save_template:
+    nail_coords = Engine.create_nail_positions(Engine.num_nails, 3000, Engine.pattern)
+    Engine.make_template(nail_coords)
+else:
+    try:
+        os.remove("results/recent/nail_template.png")
+    except:
+        pass
 t5 = time.time()
 
 tPreprocess = round(t1-t0,2)

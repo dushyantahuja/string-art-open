@@ -1,18 +1,18 @@
-Author: Will Taylor
-Learn more: stringboard.co.uk
+Author: Will Taylor  
+Learn more: stringboard.co.uk  
 
 A Better Open Source Python Based String Art Generation Repository
 * fast: 1-2s generation with numba compiler
 * accurate: previews correlated to real string art 
-* optimal: importance weighting, robust image preprocessing including background removal, optimal greedy algorithm
+* optimal: feature highlighting, background removal, optimal greedy algorithm
 
 ![alt text](results/library/example/preview_easel.jpeg)
 
-SETUP AND DEPENDENCIES
-git clone https://github.com/StringBoardUK/string-art-open.git
-cd string-art-open
-pip install -r requirements.txt
-(or just use VS code quick create virtual environment)
+SETUP AND DEPENDENCIES  
+git clone https://github.com/StringBoardUK/string-art-open.git  
+cd string-art-open  
+pip install -r requirements.txt  
+(or just use VS code quick create virtual environment)  
 
 ===========================================================================================
 CONTENTS
@@ -32,8 +32,6 @@ StringArtUtils has useful functions:
 number_reader: simple UI for reading sequence (helpful for actually stringing)
 
 assets
-    - line_porfiles_500.npy: pre computed anti-aliased line profiles (rows,cols,vals), 150Mb
-    (will be created on the first generation, then reused)
     - nail_template_circle.png: full size nail template
     - nail_template_circle_sliced.pdf: sliced for 50cm board diameter
     (same for square for 50cm side length)
@@ -42,7 +40,7 @@ assets
 ========================================================================================================
 Technical details and usage:
 
-* To make new nail templates, uncomment relevant block in main.py, then slice them to your desired size 
+* Nail templates can be generated automatically, you just need to slice it to your desired size 
 at rasterbator.net with 10mm margin and 5mm overlap (final size is with margins cut away)
 
 * This string art generator has been developed by correlating physical results to model parameters, 
@@ -60,11 +58,11 @@ e.g. if you wanted to use a different thread change kNylon to a new weighting pa
 
 * Once sequence is generated, the code will render the final string art into a high resolution (1000x1000px) png image. 
 This can then be pasted onto a template image with known centre and diameter coordinates
-(I've provided template_wall, but you can use your own). Lighting can be simulated by adjusting brightness and tint
+(I've provided a basic template, but you can use your own). Lighting can be simulated by adjusting brightness and tint
 
 * To add a new template image for rendering
-- in StringArtEngine load_templates, load in new template image
-- in StringArtEngine render_all_previews, add the new template coords, lighting setup and add to previews dictionary
+in StringArtEngine load_templates, load in new template image  
+in StringArtEngine render_all_previews, add the new template coords, lighting setup and add to previews dictionary  
 
 * Use the importance UI tool to highlight details in the string art. Can adjust the strength of this in StringArtUtils
 

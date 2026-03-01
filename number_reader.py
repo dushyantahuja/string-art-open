@@ -7,9 +7,9 @@ from PyQt5.QtCore import Qt
 import numpy as np
 import os
 
-path = 'results/recent/nail_indices.txt'
+project_path = 'results/recent'
 
-with open(path) as f:
+with open(os.path.join(project_path,"sequence.txt")) as f:
     numbers = [int(x.strip()) for x in f.read().split(',')]
     
 class NumberReader(QWidget):
@@ -18,8 +18,8 @@ class NumberReader(QWidget):
         self.setWindowTitle("Number Reader")
         
         # Load saved index if exists
-        if os.path.exists("final_index.npy"):
-            self.index = int(np.load("final_index.npy"))
+        if os.path.exists(os.path.join(project_path,"current_index.npy")):
+            self.index = int(np.load(os.path.join(project_path,"current_index.npy")))
         else:
             self.index = 0
 
@@ -97,8 +97,8 @@ class NumberReader(QWidget):
         self.progress_label.setText(progress_text)
         
     def closeEvent(self, event):
-        np.save("final_index.npy", self.index)
-        print(f"Saved final index: {self.index}")
+        np.save(os.path.join(project_path,"current_index.npy"), self.index)
+        print(f"Saved current index: {self.index}")
         event.accept()
 
 
