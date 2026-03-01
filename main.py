@@ -14,7 +14,7 @@ image_name = 'example.png' # image must be in images folder
 settings = {
     # image preprocessing
     "use_importance": True, # draw an importance mask to highlight detail in the string art
-    "background_removal": False, # additional setup parameters are in StringArtEngine __init__
+    "background_removal": False, # rembg background removal
     "background_color": 100, # 100, if we remove background, replace with this shade (255=white)
     "darkening": 0.8, # 0.8, darkening image can improve accuracy
                         
@@ -47,15 +47,11 @@ target = Engine.preprocess(original_image) # Step 1, prepare image for string ar
 t1 = time.time()
 
 if use_importance:
-    try:
-        importance = np.load("results/recent/importance.npy")
-    except:  
-        importance = np.ones_like(target, dtype=np.float32)    
+    importance = Engine.load_or_init_importance("results/recent/importance.npy", target, Engine.resolution)
     print("Waiting for importance mask...")
     importance = Engine.draw_importance_mask(target, importance)
 else:
     importance = np.ones_like(target, dtype=np.float32)
-
 
 t2 = time.time()
 print("Generating...")

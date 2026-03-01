@@ -319,6 +319,17 @@ class StringArtUtils():
         plt.close(fig)
     
     @staticmethod
+    def load_or_init_importance(path, target, resolution):
+        try:
+            importance = np.load(path)
+            if importance.shape[0] != resolution:
+                raise ValueError("Importance mask has wrong resolution")
+        except (OSError, ValueError):
+            importance = np.ones_like(target, dtype=np.float32)
+
+        return importance
+
+    @staticmethod
     def draw_importance_mask(target: np.ndarray, importance=None, max_val = 4.0) -> np.ndarray:
         """
         Interactive importance mask editor using matplotlib.
@@ -337,6 +348,7 @@ class StringArtUtils():
             importance = np.ones((h, w), dtype=np.float32)
         
         fig, ax = plt.subplots()
+        ax.set_axis_off()
         painting = {"mode": +1}  # +1 = paint, -1 = erase
 
         def mode_str():

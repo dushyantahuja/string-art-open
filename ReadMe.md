@@ -49,7 +49,7 @@ the best thread type: 0.1mm nylon monofilament. With this thread you should aim 
 * You can use a different thread type, but it will not be correlated so results might not be accurate
 
 * Resolution of input image to generator does not need to be above 500x500px. String art
-cannot achieve higher than 200-300px resolution, so input doesn't need to be more
+cannot achieve higher than 200-300px resolution, so input doesn't need to be particularly high res. Contrast lighting is far more important than resolution for inputs. This 200-300px resolution limit on results was with 50cm circular board and 200 nails - if you had say 300 nails and an 80cm board, you might start to approach the 500px resolution limit and therefore higher resolution images and generator setting could be useful
 
 * Lines are drawn 1px thick (+anti aliasing), and line strength is calculated as follows:
 line_strength = kNylon * resolution/500 * 480/board_diameter_mm

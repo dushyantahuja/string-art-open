@@ -136,7 +136,7 @@ class StringArtEngine(StringArtUtils):
             raise ValueError("Invalid thread type")
         
         if self.resolution not in [500]:
-            raise ValueError("Don't change resulution unless you are using a very large canvas")
+            raise ValueError("Increasing resolution won't improve results (unless your canvas is huge)")
         
         # Calculate nail coordinates and valid paths and load in line profiles and templates
         self.nail_coords = self.create_nail_positions(self.num_nails, self.resolution, self.pattern)
@@ -144,8 +144,8 @@ class StringArtEngine(StringArtUtils):
         self.line_profiles = self.load_or_make_line_profiles(self.resolution, self.pattern, self.nail_coords)
         self.templates = self.load_templates()
     
-    def load_or_make_line_profiles(self, resolution, pattern, nail_coords):
-        name = f"line_profiles_{pattern}_{resolution}.npy"
+    def load_or_make_line_profiles(self, resolution, pattern, nail_coords, num_nails):
+        name = f"line_profiles_{pattern}_{resolution}_{num_nails}.npy"
         assets_path = Path(resources.files("assets"))
         file_path = assets_path / name
         
