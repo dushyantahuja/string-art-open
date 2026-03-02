@@ -141,7 +141,12 @@ class StringArtEngine(StringArtUtils):
         # Calculate nail coordinates and valid paths and load in line profiles and templates
         self.nail_coords = self.create_nail_positions(self.num_nails, self.resolution, self.pattern)
         self.candidate_nails = self.get_candidate_nails(self.nail_coords, self.num_nails, self.min_distance, self.pattern)
-        self.line_profiles = self.load_or_make_line_profiles(self.resolution, self.pattern, self.nail_coords)
+        self.line_profiles = self.load_or_make_line_profiles(
+            self.resolution,
+            self.pattern,
+            self.nail_coords,
+            len(self.nail_coords),
+        )
         self.templates = self.load_templates()
     
     def load_or_make_line_profiles(self, resolution, pattern, nail_coords, num_nails):
